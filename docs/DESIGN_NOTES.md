@@ -96,6 +96,15 @@ The 30-day rule lives in the calculator because every current plan has it. The t
 **existing** plans", so a future plan may not. **Improvement:** move it into the policy as a default method
 `gracePeriodDays()` returning 30, which a new plan can override; existing plans need no change.
 
+### 3.4a Policy registry and package layout (Documented)
+- The calculator falls back to no interest when a known plan has no registered policy, the same as for an
+  unknown plan. The default registry is complete (a test fails the build otherwise), but a custom map passed
+  to the second constructor could miss a plan silently. **Improvement:** fail fast on an incomplete registry
+  once custom registries are used in production code.
+- `TimeDeposit` and `TimeDepositCalculator` must stay in `org.ikigaidigital`, while the policies live in
+  `org.ikigaidigital.domain`, so the two packages reference each other. **Improvement:** move both shared
+  classes into `domain` once consumers can migrate.
+
 ### 3.5 Withdrawals do not affect interest (Documented)
 The task returns withdrawals but does not say how they affect interest. **Improvement:** a
 withdrawal-aware `InterestPolicy` (for example a penalty for early withdrawal), which the policy design
