@@ -45,8 +45,11 @@ class TimeDepositPersistenceAdapter implements TimeDepositRepository {
                 .collect(Collectors.toMap(TimeDepositEntity::getId, Function.identity()));
         for (TimeDeposit deposit : toSave) {
             // The shared class keeps a Double; the database keeps cents.
-            managed.get(deposit.getId())
-                    .setBalance(BigDecimal.valueOf(deposit.getBalance()).setScale(2, RoundingMode.HALF_UP));
+            TimeDepositEntity entity = managed.get(deposit.getId());
+            if (entity == null) {
+                throw new IllegalStateException("Time deposit " + deposit.getId() + " does not exist");
+            }
+            entity.setBalance(BigDecimal.valueOf(deposit.getBalance()).setScale(2, RoundingMode.HALF_UP));
         }
     }
 

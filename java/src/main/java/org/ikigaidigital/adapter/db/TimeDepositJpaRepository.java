@@ -11,7 +11,7 @@ interface TimeDepositJpaRepository extends JpaRepository<TimeDepositEntity, Inte
 
     List<TimeDepositEntity> findAllByOrderByIdAsc();
 
-    /** SELECT ... ORDER BY id FOR UPDATE: the fixed order keeps concurrent runs from deadlocking. */
+    /** FOR NO KEY UPDATE on PostgreSQL; the fixed id order prevents deadlocks between runs. */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select d from TimeDepositEntity d order by d.id")
     List<TimeDepositEntity> findAllForUpdate();

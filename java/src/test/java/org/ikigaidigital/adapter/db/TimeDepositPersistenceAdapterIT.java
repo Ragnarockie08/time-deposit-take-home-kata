@@ -16,12 +16,15 @@ import org.springframework.transaction.IllegalTransactionStateException;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import javax.sql.DataSource;
 import java.math.BigDecimal;
 import java.sql.Connection;
+import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.function.Supplier;
@@ -52,9 +55,10 @@ class TimeDepositPersistenceAdapterIT {
 
     @BeforeEach
     void cleanTables() {
-        // Each test inserts its own rows; the demo seed from V2 is wiped (rolled back with the test transaction).
-        jdbc.update("delete from withdrawals");
-        jdbc.update("delete from time_deposits");
+        if (TransactionSynchronizationManager.isActualTransactionActive()) {
+            jdbc.update("delete from withdrawals");
+            jdbc.update("delete from time_deposits");
+        }
     }
 
     private void insertDeposit(int id, String plan, int days, String balance) {
@@ -103,8 +107,8 @@ class TimeDepositPersistenceAdapterIT {
         insertDeposit(3, "student", 99, "300.00");
 
         deposits.saveBalances(List.of(
-                new TimeDeposit(1, "basic", 100.125, 31),      // exact half cent rounds up
-                new TimeDeposit(2, "premium", 6.029999999999999, 50), // double noise rounds back to cents
+                new TimeDeposit(1, "basic", 100.125, 31),
+                new TimeDeposit(2, "premium", 6.029999999999999, 50),
                 new TimeDeposit(3, "student", 300.0, 99)));
         entityManager.flush();
 
@@ -114,6 +118,19 @@ class TimeDepositPersistenceAdapterIT {
                 .isEqualByComparingTo("6.03");
         assertThat(jdbc.queryForObject("select balance from time_deposits where id = 3", BigDecimal.class))
                 .isEqualByComparingTo("300.00");
+    }
+
+    @Test
+    void savesBalancesOfRowsLockedInTheSameTransaction() {
+        insertDeposit(1, "basic", 31, "1000.00");
+
+        List<TimeDeposit> locked = deposits.findAllForUpdate();
+        locked.get(0).setBalance(1000.83);
+        deposits.saveBalances(locked);
+        entityManager.flush();
+
+        assertThat(jdbc.queryForObject("select balance from time_deposits where id = 1", BigDecimal.class))
+                .isEqualByComparingTo("1000.83");
     }
 
     @Test
@@ -151,6 +168,34 @@ class TimeDepositPersistenceAdapterIT {
             }
         }
         assertThat(inTransaction(lock::tryAcquire)).isTrue();
+    }
+
+    @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    void interestRunLockIsHeldUntilTheCallerCommits() throws SQLException {
+        try (Connection other = dataSource.getConnection()) {
+            Boolean otherSessionGotLockDuringRun = new TransactionTemplate(transactionManager).execute(status -> {
+                assertThat(lock.tryAcquire()).isTrue();
+                return tryLockAndRelease(other);
+            });
+
+            assertThat(otherSessionGotLockDuringRun).isFalse();
+            assertThat(tryLockAndRelease(other)).isTrue();
+        }
+    }
+
+    private static boolean tryLockAndRelease(Connection connection) {
+        try (Statement statement = connection.createStatement()) {
+            ResultSet result = statement.executeQuery("select pg_try_advisory_lock(" + PostgresInterestRunLock.LOCK_KEY + ")");
+            result.next();
+            boolean acquired = result.getBoolean(1);
+            if (acquired) {
+                statement.execute("select pg_advisory_unlock(" + PostgresInterestRunLock.LOCK_KEY + ")");
+            }
+            return acquired;
+        } catch (SQLException e) {
+            throw new IllegalStateException(e);
+        }
     }
 
     private <T> T inTransaction(Supplier<T> work) {
