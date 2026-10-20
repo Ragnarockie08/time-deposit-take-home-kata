@@ -81,12 +81,30 @@ so a crashed instance cannot leave it held.
 
 ### 2.3 Repeated runs apply interest again (Mitigated)
 2.2 only rejects runs that **overlap**. A second POST sent after the first one finished (or a client retry
-after a timeout) still applies another month of interest. The task fixes the schema and the domain has no
-notion of an interest period (`days` is never advanced), so this is not solved here. **Improvement:**
+after a timeout) still applies another month of interest. The task does not ask for a limit, fixes the schema,
+and the domain has no notion of an interest period, so this is not solved here.
 
-- an `interest_runs(period PRIMARY KEY)` table inserted in the same transaction, so a second run for the
-  same period fails on the unique constraint (exactly once, atomic with the update);
-- or per-deposit `last_interest_date`, which also supports resuming a partial batch.
+**Proposed rule:** interest is applied at most **once per period** (for example per calendar month), and the
+database enforces it, so it holds across retries and instances. The period comes from an injected
+`java.time.Clock` (the bank's business date, not the server's), which also makes it testable.
+
+- **Run registry** (fits the current single-transaction run): a table `interest_runs(period PRIMARY KEY,
+  applied_at)`. The run inserts the period (`INSERT … ON CONFLICT DO NOTHING`) in the **same transaction** as
+  the balance updates. If the row already exists, the run stops with 409 and changes nothing. A crash leaves no
+  row, so a retry is allowed. Two instances inserting the same period are serialised by the primary key, so the
+  advisory lock from 2.2 becomes optional. In the code: a new outbound port `InterestRunRegistry` with a
+  PostgreSQL adapter, and a second 409 reason in the contract.
+- **Per-deposit marker** (needed once runs are chunked, see 2.4, or deposits join mid-period): a column
+  `last_interest_period` set together with the new balance, and the run only selects deposits not yet paid for
+  the period. A rerun after a crash continues with the deposits that were missed.
+
+Rejected alternatives: a minimum time between runs (months are not 30 days, and a late run shifts every later
+window), a flag in application memory (lost on restart, not shared between instances), an `Idempotency-Key`
+header alone (protects a client from its own retries, not two callers running the same month), and a
+check-then-insert without a unique constraint (two instances can both pass the check).
+
+Open business questions: which calendar defines the period, whether a missed month is caught up by the next run
+or skipped, and how operations can re-run a period with an audited override.
 
 ### 2.4 Whole-table lock in one transaction (Documented)
 Fine for this data size; at bank scale it means one long transaction holding every row lock, and balances
