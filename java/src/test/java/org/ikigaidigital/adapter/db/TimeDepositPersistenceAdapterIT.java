@@ -3,9 +3,12 @@ package org.ikigaidigital.adapter.db;
 import jakarta.persistence.EntityManager;
 import org.ikigaidigital.TestcontainersConfiguration;
 import org.ikigaidigital.TimeDeposit;
+import org.ikigaidigital.domain.PlanType;
 import org.ikigaidigital.domain.Withdrawal;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
@@ -143,6 +146,14 @@ class TimeDepositPersistenceAdapterIT {
         assertThat(withdrawals.findAll()).containsExactly(
                 new Withdrawal(1, 1, new BigDecimal("10.00"), LocalDate.of(2026, 1, 1)),
                 new Withdrawal(2, 2, new BigDecimal("20.50"), LocalDate.of(2026, 2, 2)));
+    }
+
+    @ParameterizedTest
+    @EnumSource(PlanType.class)
+    void databaseAcceptsEveryPlanType(PlanType planType) {
+        insertDeposit(1, planType.code(), 31, "100.00");
+
+        assertThat(deposits.findAll()).extracting(TimeDeposit::getPlanType).containsExactly(planType.code());
     }
 
     @Test
