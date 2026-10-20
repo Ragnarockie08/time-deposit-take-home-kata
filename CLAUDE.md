@@ -22,7 +22,7 @@ org.ikigaidigital
 └── adapter/db/    JPA entities, Spring Data repositories, port implementations
 ```
 - Dependencies point inward: adapters → application → domain. The domain imports no Spring, JPA or HTTP types.
-- The OpenAPI file `java/src/main/resources/openapi/time-deposits.yaml` is the source of truth for the API.
+- The OpenAPI file `java/src/main/resources/static/openapi/time-deposits.yaml` is the source of truth for the API.
   Change the contract first, then the code.
 - JPA entities are separate from `TimeDeposit`. Never annotate the shared class.
 - Money is `BigDecimal` / `numeric(19,2)` everywhere outside the shared class.

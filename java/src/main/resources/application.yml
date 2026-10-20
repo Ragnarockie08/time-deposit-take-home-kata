@@ -1,0 +1,32 @@
+spring:
+  application:
+    name: time-deposit-kata
+  datasource:
+    # Credentials come from the environment; the defaults only match the local docker-compose database.
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/time_deposits}
+    username: ${DB_USERNAME:time_deposits}
+    password: ${DB_PASSWORD:time_deposits}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate   # Flyway owns the schema
+  flyway:
+    locations: classpath:db/migration
+  mvc:
+    problemdetails:
+      enabled: true
+
+server:
+  error:
+    include-stacktrace: never
+    include-message: never
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+
+springdoc:
+  swagger-ui:
+    url: /openapi/time-deposits.yaml   # show the hand-written contract, not one generated from code
