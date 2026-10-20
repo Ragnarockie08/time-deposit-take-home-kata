@@ -90,8 +90,9 @@ org.ikigaidigital
 
 ## Assumptions
 
-- One POST applies one month of interest. It does not advance `days`, as the original calculator never did,
-  and it is not idempotent: every call applies another month.
+- `days` is maintained by another service that owns the deposits; this one only applies interest. One POST
+  applies one month of interest to the deposits as stored and does not change `days`, as the original
+  calculator never did. It is not idempotent: every call applies another month.
 - "No interest after 1 year" for students means `days < 366`, exactly as the original code.
 - Plan types are the lowercase codes the original code used; unknown codes earn nothing.
 - Withdrawals are returned but do not affect interest; the task does not say how they would.
@@ -105,9 +106,10 @@ Every trade-off and known limitation, with what could be improved next, is in
 
 ## AI-assisted development
 
-Built with Claude Code and a small agent team (lead, researcher, implementers in parallel git worktrees,
-reviewer). Setup, rules and what was AI-assisted: [docs/AI_WORKFLOW.md](docs/AI_WORKFLOW.md),
-[CLAUDE.md](CLAUDE.md), [.claude/agents/](.claude/agents).
+I worked with Claude Code and a small set of agents: I own the design and review, the agents take focused,
+tested pieces of work. How I work with them, the setup and what was AI-assisted:
+[docs/AI_WORKFLOW.md](docs/AI_WORKFLOW.md), with the rules in [CLAUDE.md](CLAUDE.md) and
+[.claude/agents/](.claude/agents).
 
 ## Commit history
 
