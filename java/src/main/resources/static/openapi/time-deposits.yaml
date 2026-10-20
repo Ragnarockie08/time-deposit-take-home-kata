@@ -1,0 +1,96 @@
+openapi: 3.0.3
+info:
+  title: XA Bank Time Deposits API
+  version: 1.0.0
+  description: |
+    Time deposits and their monthly interest.
+    `POST /time-deposits/balance-updates` applies one month of interest to every deposit;
+    `GET /time-deposits` lists the deposits with their withdrawals.
+tags:
+  - name: TimeDeposits
+paths:
+  /time-deposits:
+    get:
+      tags: [TimeDeposits]
+      operationId: getTimeDeposits
+      summary: List all time deposits with their withdrawals
+      responses:
+        '200':
+          description: All time deposits
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TimeDeposit'
+  /time-deposits/balance-updates:
+    post:
+      tags: [TimeDeposits]
+      operationId: updateBalances
+      summary: Apply one month of interest to every time deposit
+      description: |
+        Not idempotent: every successful call applies another month of interest.
+        All balances are updated in one transaction.
+      responses:
+        '204':
+          description: Interest applied to all time deposits
+        '409':
+          description: Another balance update is already running
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+components:
+  schemas:
+    TimeDeposit:
+      type: object
+      required: [id, planType, balance, days, withdrawals]
+      properties:
+        id:
+          type: integer
+          format: int32
+        planType:
+          $ref: '#/components/schemas/PlanType'
+        balance:
+          type: number
+          description: Balance in the account currency, two decimal places
+          example: 1000.83
+        days:
+          type: integer
+          format: int32
+          description: Days since the deposit was opened
+        withdrawals:
+          type: array
+          items:
+            $ref: '#/components/schemas/Withdrawal'
+    PlanType:
+      type: string
+      enum: [basic, student, premium]
+    Withdrawal:
+      type: object
+      required: [id, amount, date]
+      properties:
+        id:
+          type: integer
+          format: int32
+        amount:
+          type: number
+          example: 250.00
+        date:
+          type: string
+          format: date
+    Problem:
+      type: object
+      description: RFC 9457 problem details
+      properties:
+        type:
+          type: string
+        title:
+          type: string
+        status:
+          type: integer
+          format: int32
+        detail:
+          type: string
+        instance:
+          type: string
