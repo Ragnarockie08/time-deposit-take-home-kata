@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 
@@ -15,19 +16,19 @@ class InterestPolicyTest {
 
     @Test
     void basicPaysOnePercentAYearMonthly() {
-        assertThat(new BasicInterestPolicy().monthlyInterest(deposit("basic", 1200.00, 31))).isEqualTo(1.0);
+        assertThat(new BasicInterestPolicy().monthlyInterest(deposit("basic", 1200.00, 31))).isEqualByComparingTo("1");
     }
 
     @ParameterizedTest(name = "{0} days -> {1}")
-    @CsvSource({"365, 3.0", "366, 0.0"})
-    void studentStopsPayingAfterOneYear(int days, double expected) {
-        assertThat(new StudentInterestPolicy().monthlyInterest(deposit("student", 1200.00, days))).isEqualTo(expected);
+    @CsvSource({"365, 3", "366, 0"})
+    void studentStopsPayingAfterOneYear(int days, BigDecimal expected) {
+        assertThat(new StudentInterestPolicy().monthlyInterest(deposit("student", 1200.00, days))).isEqualByComparingTo(expected);
     }
 
     @ParameterizedTest(name = "{0} days -> {1}")
-    @CsvSource({"45, 0.0", "46, 5.0"})
-    void premiumStartsPayingAfterFortyFiveDays(int days, double expected) {
-        assertThat(new PremiumInterestPolicy().monthlyInterest(deposit("premium", 1200.00, days))).isEqualTo(expected);
+    @CsvSource({"45, 0", "46, 5"})
+    void premiumStartsPayingAfterFortyFiveDays(int days, BigDecimal expected) {
+        assertThat(new PremiumInterestPolicy().monthlyInterest(deposit("premium", 1200.00, days))).isEqualByComparingTo(expected);
     }
 
     @Test
@@ -37,7 +38,7 @@ class InterestPolicyTest {
 
     @Test
     void calculatorUsesTheRegisteredPolicyForAPlan() {
-        TimeDepositCalculator calculator = new TimeDepositCalculator(Map.of(PlanType.BASIC, deposit -> 10.0));
+        TimeDepositCalculator calculator = new TimeDepositCalculator(Map.of(PlanType.BASIC, deposit -> BigDecimal.TEN));
         TimeDeposit deposit = deposit("basic", 100.00, 31);
 
         calculator.updateBalance(List.of(deposit));

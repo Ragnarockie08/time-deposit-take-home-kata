@@ -61,18 +61,18 @@ public class TimeDepositCalculatorTest {
 
     @ParameterizedTest(name = "{0}, balance {1}, {2} days -> {3}")
     @CsvSource({
-            "basic,   18.00, 31, 18.01",
-            "student, 6.00,  31, 6.01",
-            "premium, 18.00, 46, 18.07",
+            "basic,   18.00, 31, 18.02",
+            "student, 6.00,  31, 6.02",
+            "premium, 18.00, 46, 18.08",
     })
-    void roundsExactHalfCentInterestDownBecauseOfDoubleArithmetic(
+    void roundsExactHalfCentInterestUp(
             String planType, double balance, int days, double expected) {
         assertThat(balanceAfterOneUpdate(planType, balance, days)).isEqualTo(expected);
     }
 
     @Test
-    void leavesDoubleRepresentationErrorInTheBalance() {
-        assertThat(balanceAfterOneUpdate("premium", 1.37, 46)).isEqualTo(1.3800000000000001);
+    void keepsTheBalanceInWholeCents() {
+        assertThat(balanceAfterOneUpdate("premium", 1.37, 46)).isEqualTo(1.38);
     }
 
     @Test
@@ -89,13 +89,13 @@ public class TimeDepositCalculatorTest {
     }
 
     @Test
-    void appliesInterestToTheGrownBalanceOnEveryCallWithDoubleDrift() {
+    void appliesInterestToTheGrownBalanceOnEveryCall() {
         TimeDeposit deposit = new TimeDeposit(1, "basic", 1000.00, 31);
 
         calculator.updateBalance(List.of(deposit));
         calculator.updateBalance(List.of(deposit));
 
-        assertThat(deposit.getBalance()).isEqualTo(1001.6600000000001);
+        assertThat(deposit.getBalance()).isEqualTo(1001.66);
     }
 
     @Test

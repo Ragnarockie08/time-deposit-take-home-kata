@@ -42,17 +42,17 @@ public class TimeDepositCalculator {
         return policies;
     }
 
+    // Decimal arithmetic; only the result goes back into the shared class's Double.
     public void updateBalance(List<TimeDeposit> xs) {
         for (TimeDeposit deposit : xs) {
-            double interest = monthlyInterest(deposit);
-            double roundedInterest = new BigDecimal(interest).setScale(2, RoundingMode.HALF_UP).doubleValue();
-            deposit.setBalance(deposit.getBalance() + roundedInterest);
+            BigDecimal interest = monthlyInterest(deposit).setScale(2, RoundingMode.HALF_UP);
+            deposit.setBalance(BigDecimal.valueOf(deposit.getBalance()).add(interest).doubleValue());
         }
     }
 
-    private double monthlyInterest(TimeDeposit deposit) {
+    private BigDecimal monthlyInterest(TimeDeposit deposit) {
         if (deposit.getDays() <= GRACE_PERIOD_DAYS) {
-            return 0;
+            return BigDecimal.ZERO;
         }
         return policyFor(deposit).monthlyInterest(deposit);
     }

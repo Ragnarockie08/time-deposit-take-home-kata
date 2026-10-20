@@ -2,17 +2,19 @@ package org.ikigaidigital.domain;
 
 import org.ikigaidigital.TimeDeposit;
 
+import java.math.BigDecimal;
+
 /** Premium plan: 5% a year, paid monthly, interest starts after 45 days. */
 public final class PremiumInterestPolicy implements InterestPolicy {
 
-    private static final double ANNUAL_RATE = 0.05;
+    private static final BigDecimal ANNUAL_RATE = new BigDecimal("0.05");
     private static final int DAYS_BEFORE_INTEREST = 45;
 
     @Override
-    public double monthlyInterest(TimeDeposit deposit) {
+    public BigDecimal monthlyInterest(TimeDeposit deposit) {
         if (deposit.getDays() <= DAYS_BEFORE_INTEREST) {
-            return 0;
+            return BigDecimal.ZERO;
         }
-        return deposit.getBalance() * ANNUAL_RATE / 12;
+        return InterestPolicy.monthlyInterestAt(ANNUAL_RATE, deposit);
     }
 }
