@@ -111,7 +111,8 @@ Kept exactly as the legacy code does. Leap years and the exact cut-off day are b
 The shared `TimeDeposit` exposes the plan as a `String`, so a misspelled plan would silently earn nothing.
 The text is now parsed once into a `PlanType` enum, and policies are registered in an `EnumMap`; a test fails
 the build if a plan has no policy. The OpenAPI contract declares `planType` as an enum, and the database has a
-`CHECK` constraint on `plan_type` (column type stays `varchar`, as the task defines). For compatibility, the
+`CHECK` constraint on `plan_type` (column type stays `varchar`, as the task defines). The three lists are kept in step
+by tests: the API enum must equal the domain enum, and the database must accept every domain plan. For compatibility, the
 shared calculator still pays no interest for an unknown code passed by other callers.
 
 ### 3.4 Grace period is shared by all plans (Documented)
