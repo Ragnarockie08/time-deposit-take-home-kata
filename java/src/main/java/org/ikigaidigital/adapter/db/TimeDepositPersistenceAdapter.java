@@ -38,19 +38,28 @@ class TimeDepositPersistenceAdapter implements TimeDepositRepository {
     @Override
     @Transactional(propagation = Propagation.MANDATORY)
     public void saveBalances(List<TimeDeposit> toSave) {
-        // One select loads all rows; changed balances are written by dirty checking at flush.
-        Map<Integer, TimeDepositEntity> managed = deposits
-                .findAllById(toSave.stream().map(TimeDeposit::getId).toList())
-                .stream()
-                .collect(Collectors.toMap(TimeDepositEntity::getId, Function.identity()));
+        Map<Integer, TimeDepositEntity> managedEntitiesById = loadManagedEntitiesById(toSave);
         for (TimeDeposit deposit : toSave) {
-            // The shared class keeps a Double; the database keeps cents.
-            TimeDepositEntity entity = managed.get(deposit.getId());
-            if (entity == null) {
-                throw new IllegalStateException("Time deposit " + deposit.getId() + " does not exist");
-            }
-            entity.setBalance(BigDecimal.valueOf(deposit.getBalance()).setScale(2, RoundingMode.HALF_UP));
+            managedEntityOf(deposit, managedEntitiesById).setBalance(inWholeCents(deposit.getBalance()));
         }
+    }
+
+    private Map<Integer, TimeDepositEntity> loadManagedEntitiesById(List<TimeDeposit> toSave) {
+        return deposits.findAllById(toSave.stream().map(TimeDeposit::getId).toList()).stream()
+                .collect(Collectors.toMap(TimeDepositEntity::getId, Function.identity()));
+    }
+
+    private static TimeDepositEntity managedEntityOf(TimeDeposit deposit,
+                                                     Map<Integer, TimeDepositEntity> managedEntitiesById) {
+        TimeDepositEntity entity = managedEntitiesById.get(deposit.getId());
+        if (entity == null) {
+            throw new IllegalStateException("Time deposit " + deposit.getId() + " does not exist");
+        }
+        return entity;
+    }
+
+    private static BigDecimal inWholeCents(double balance) {
+        return BigDecimal.valueOf(balance).setScale(2, RoundingMode.HALF_UP);
     }
 
     private static TimeDeposit toDomain(TimeDepositEntity entity) {
