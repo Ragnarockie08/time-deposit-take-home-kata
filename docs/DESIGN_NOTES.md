@@ -48,15 +48,18 @@ Monthly interest is `annual rate / 12`, regardless of days in the month or a day
 ## 2. Concurrency and idempotency
 
 ### 2.1 Concurrent updates across instances (Fixed)
-The update runs in one transaction and loads rows with `SELECT ... ORDER BY id FOR UPDATE`.
-Row locks live in PostgreSQL, so they work across any number of application instances:
+The update runs in one transaction and loads rows with a pessimistic write lock, ordered by id. Hibernate
+renders it on PostgreSQL as `SELECT ... ORDER BY id FOR NO KEY UPDATE`: it blocks other updates, deletes and
+lockers of those rows, and only lets foreign-key checks (a new withdrawal) through. Row locks live in
+PostgreSQL, so they work across any number of application instances:
 
 - all-or-nothing: a crash mid-run rolls back;
 - no lost update: a second run waits and then reads the committed balances;
 - no deadlock: rows are always locked in `id` order.
 
 ### 2.2 Overlapping runs (Fixed)
-At the start of the transaction the update takes `pg_try_advisory_xact_lock` on a fixed key. If another
+At the start of the transaction the update takes `pg_try_advisory_xact_lock` on a fixed key, on the same
+connection as the JPA work (an integration test proves the lock is held until commit). If another
 instance is already running the update, the call returns **409 Conflict** at once instead of queueing behind
 the row locks and applying interest a second time. The lock is released automatically on commit or rollback,
 so a crashed instance cannot leave it held.
@@ -71,8 +74,13 @@ notion of an interest period (`days` is never advanced), so this is not solved h
 - or per-deposit `last_interest_date`, which also supports resuming a partial batch.
 
 ### 2.4 Whole-table lock in one transaction (Documented)
-Fine for this data size; at bank scale it means one long transaction holding every row lock.
-**Improvement:** process in chunks (keyset pagination, one transaction per chunk) together with 2.3.
+Fine for this data size; at bank scale it means one long transaction holding every row lock, and balances
+are written with one `UPDATE` per row (no JDBC batching). **Improvement:** process in chunks (keyset
+pagination, one transaction per chunk) together with 2.3, and enable Hibernate JDBC batching.
+
+### 2.5 Consistent reads for the listing (Fixed)
+`GET /time-deposits` reads deposits and withdrawals with two queries. It runs in a read-only
+`REPEATABLE_READ` transaction, so both queries see the same snapshot.
 
 ## 3. Domain model
 
@@ -95,15 +103,6 @@ shared calculator still pays no interest for an unknown code passed by other cal
 The 30-day rule lives in the calculator because every current plan has it. The task says "for any
 **existing** plans", so a future plan may not. **Improvement:** move it into the policy as a default method
 `gracePeriodDays()` returning 30, which a new plan can override; existing plans need no change.
-
-### 3.4a Policy registry and package layout (Documented)
-- The calculator falls back to no interest when a known plan has no registered policy, the same as for an
-  unknown plan. The default registry is complete (a test fails the build otherwise), but a custom map passed
-  to the second constructor could miss a plan silently. **Improvement:** fail fast on an incomplete registry
-  once custom registries are used in production code.
-- `TimeDeposit` and `TimeDepositCalculator` must stay in `org.ikigaidigital`, while the policies live in
-  `org.ikigaidigital.domain`, so the two packages reference each other. **Improvement:** move both shared
-  classes into `domain` once consumers can migrate.
 
 ### 3.5 Withdrawals do not affect interest (Documented)
 The task returns withdrawals but does not say how they affect interest. **Improvement:** a
@@ -130,6 +129,35 @@ No pagination. **Improvement:** cursor pagination once the deposit count grows.
 Required by the task. In production this is a scheduled batch job with a single leader (for example
 ShedLock), with metrics and alerts on each run, not a public endpoint.
 
-## 5. Schema naming (Documented)
+## 5. Database
+
+### 5.1 Schema naming (Documented)
 The task names tables and columns in camelCase (`timeDeposits`, `planType`). PostgreSQL folds unquoted
 identifiers to lowercase, so the schema uses snake_case (`time_deposits`, `plan_type`) with a 1:1 mapping.
+
+### 5.2 Demo data is a regular migration (Documented)
+`V2__seed_demo_data.sql` lives next to the schema, so every environment gets the demo deposits. That suits
+this exercise (there is no endpoint to create deposits). **Improvement:** move it to a separate Flyway
+location enabled only for local and demo profiles.
+
+## 6. Architecture
+
+### 6.1 Spring annotations in the application core (Documented)
+The domain is framework-free, but the application service uses `@Service` and `@Transactional`. A strict
+hexagonal core would be a plain class wired in a `@Configuration`, with transactions applied outside it.
+For a service this size that adds wiring without changing behaviour, so the pragmatic form is kept.
+
+### 6.2 Policy registry (Documented)
+The calculator falls back to no interest when a known plan has no registered policy, the same as for an
+unknown plan. The default registry is complete (a test fails the build otherwise), but a custom map passed
+to the second constructor could miss a plan silently. **Improvement:** fail fast on an incomplete registry
+once custom registries are used in production code.
+
+### 6.3 Shared classes outside the domain package (Documented)
+`TimeDeposit` and `TimeDepositCalculator` must stay in `org.ikigaidigital`, while the policies live in
+`org.ikigaidigital.domain`, so the two packages reference each other. **Improvement:** move both shared
+classes into `domain` once consumers can migrate.
+
+### 6.4 Two persistence adapters (Documented)
+`TimeDepositRepository` and `WithdrawalRepository` both declare `findAll()` with different return types, so
+one class cannot implement both. Each port has its own small adapter.

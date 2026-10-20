@@ -17,7 +17,7 @@ Hexagonal, one Maven module, Spring Boot 4.1, Java 17, PostgreSQL + Flyway.
 org.ikigaidigital
 ├── TimeDeposit, TimeDepositCalculator   shared classes, stay in place
 ├── domain/        PlanType, InterestPolicy + one policy per plan, Withdrawal
-├── application/   port/in (use cases), port/out (repositories), service
+├── application/   port/in (use cases), port/out (repositories), service (implements the use cases)
 ├── adapter/rest/  controller implementing the interface generated from the OpenAPI contract
 └── adapter/db/    JPA entities, Spring Data repositories, port implementations
 ```
