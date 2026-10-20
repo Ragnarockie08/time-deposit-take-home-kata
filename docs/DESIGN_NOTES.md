@@ -1,0 +1,126 @@
+# Design notes: known issues and future improvements
+
+This file lists the design issues found while working on the kata, what the submission does about each
+one, and how it could be improved later. Status values:
+
+- **Fixed**: handled in this submission.
+- **Mitigated**: partly handled, the rest is described.
+- **Documented**: intentionally left as is, with the reason and the proposed improvement.
+
+## 1. Money correctness
+
+### 1.1 Interest computed in `double` (Fixed, as a separate commit)
+The legacy `TimeDepositCalculator` computes interest as `balance * rate / 12` in `double` and rounds
+`new BigDecimal(double)` with `HALF_UP`. Binary floating point cannot represent most decimal values, so
+at exact half-cent results the value lands just below `.xx5` and is rounded **down**.
+
+A sweep over every balance from 0.01 to 1,000,000.00 found the legacy result differs from exact decimal
+arithmetic in:
+
+| Plan rate | Balances with wrong interest | Example |
+|---|---|---|
+| 1% (basic) | 30,349 (0.03%) | 18.00 → legacy 0.01, correct 0.02 |
+| 3% (student) | 170,436 (0.17%) | 6.00 → legacy 0.01, correct 0.02 |
+| 5% (premium) | 95,631 (0.10%) | 18.00 → legacy 0.07, correct 0.08 |
+
+The error always under-pays the customer. The README states that `updateBalance` works correctly and
+its behaviour must not change, so the work is split:
+
+1. The refactor commit keeps the legacy `double` arithmetic exactly; the pinning tests prove it.
+2. A separate commit switches the calculator to `BigDecimal` internally and changes only the half-cent
+   tests. It can be reverted on its own if the legacy behaviour is required.
+
+### 1.2 Balance is a `Double` in the shared `TimeDeposit` class (Documented)
+`TimeDeposit` must not change, so its `Double balance` stays. The database (`numeric(19,2)`) and the API
+use decimals and convert at the edges with `BigDecimal.valueOf`. About 25% of legacy results are not exactly
+representable as `double` (for example `6.029999999999999`), which the edge conversion rounds back to cents.
+**Improvement:** a versioned `TimeDeposit` (or a new domain type) with a `BigDecimal` or `Money` balance,
+migrated with consumers.
+
+### 1.3 Rounding policy (Documented)
+`HALF_UP` is kept as the business rule. Banks often use `HALF_EVEN` (banker's rounding) to remove
+systematic bias. **Improvement:** make the rounding mode a business decision in configuration.
+
+### 1.4 Simple monthly interest (Documented)
+Monthly interest is `annual rate / 12`, regardless of days in the month or a day-count convention
+(Actual/365, 30/360). **Improvement:** a day-count convention per product, as a policy.
+
+## 2. Concurrency and idempotency
+
+### 2.1 Concurrent updates across instances (Fixed)
+The update runs in one transaction and loads rows with `SELECT ... ORDER BY id FOR UPDATE`.
+Row locks live in PostgreSQL, so they work across any number of application instances:
+
+- all-or-nothing: a crash mid-run rolls back;
+- no lost update: a second run waits and then reads the committed balances;
+- no deadlock: rows are always locked in `id` order.
+
+### 2.2 Overlapping runs (Fixed)
+At the start of the transaction the update takes `pg_try_advisory_xact_lock` on a fixed key. If another
+instance is already running the update, the call returns **409 Conflict** at once instead of queueing behind
+the row locks and applying interest a second time. The lock is released automatically on commit or rollback,
+so a crashed instance cannot leave it held.
+
+### 2.3 Repeated runs apply interest again (Mitigated)
+2.2 only rejects runs that **overlap**. A second POST sent after the first one finished (or a client retry
+after a timeout) still applies another month of interest. The task fixes the schema and the domain has no
+notion of an interest period (`days` is never advanced), so this is not solved here. **Improvement:**
+
+- an `interest_runs(period PRIMARY KEY)` table inserted in the same transaction, so a second run for the
+  same period fails on the unique constraint (exactly once, atomic with the update);
+- or per-deposit `last_interest_date`, which also supports resuming a partial batch.
+
+### 2.4 Whole-table lock in one transaction (Documented)
+Fine for this data size; at bank scale it means one long transaction holding every row lock.
+**Improvement:** process in chunks (keyset pagination, one transaction per chunk) together with 2.3.
+
+## 3. Domain model
+
+### 3.1 Time does not advance (Documented)
+The calculator never changes `days`, so one update call means "apply one month of interest" without
+moving time forward. **Improvement:** derive age from a start date and a business clock instead of a
+stored `days` counter.
+
+### 3.2 "No interest after 1 year" means `days < 366` (Documented)
+Kept exactly as the legacy code does. Leap years and the exact cut-off day are business questions.
+
+### 3.3 Plan types are free-form strings (Fixed)
+The shared `TimeDeposit` exposes the plan as a `String`, so a misspelled plan would silently earn nothing.
+The text is now parsed once into a `PlanType` enum, and policies are registered in an `EnumMap`; a test fails
+the build if a plan has no policy. The OpenAPI contract declares `planType` as an enum, and the database has a
+`CHECK` constraint on `plan_type` (column type stays `varchar`, as the task defines). For compatibility, the
+shared calculator still pays no interest for an unknown code passed by other callers.
+
+### 3.4 Grace period is shared by all plans (Documented)
+The 30-day rule lives in the calculator because every current plan has it. The task says "for any
+**existing** plans", so a future plan may not. **Improvement:** move it into the policy as a default method
+`gracePeriodDays()` returning 30, which a new plan can override; existing plans need no change.
+
+### 3.5 Withdrawals do not affect interest (Documented)
+The task returns withdrawals but does not say how they affect interest. **Improvement:** a
+withdrawal-aware `InterestPolicy` (for example a penalty for early withdrawal), which the policy design
+supports without changing the calculator.
+
+### 3.6 Balance is overwritten instead of booked (Documented)
+Interest is applied by overwriting `balance`, so there is no audit trail. **Improvement:** a ledger of
+interest entries, with the balance derived from it or reconciled against it.
+
+## 4. API and security
+
+### 4.1 No authentication or authorization (Documented)
+Both endpoints are open, including a bulk operation that moves money. **Improvement:** OAuth2 / JWT at
+the gateway or as a resource server, an operator role for the update, and audit logging of who ran it.
+
+### 4.2 No input validation (Documented)
+Not required by the task. The endpoints take no input today.
+
+### 4.3 GET returns everything (Documented)
+No pagination. **Improvement:** cursor pagination once the deposit count grows.
+
+### 4.4 Interest run as an HTTP endpoint (Documented)
+Required by the task. In production this is a scheduled batch job with a single leader (for example
+ShedLock), with metrics and alerts on each run, not a public endpoint.
+
+## 5. Schema naming (Documented)
+The task names tables and columns in camelCase (`timeDeposits`, `planType`). PostgreSQL folds unquoted
+identifiers to lowercase, so the schema uses snake_case (`time_deposits`, `plan_type`) with a 1:1 mapping.
