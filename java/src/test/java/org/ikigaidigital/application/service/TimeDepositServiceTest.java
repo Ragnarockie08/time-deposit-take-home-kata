@@ -1,4 +1,4 @@
-package org.ikigaidigital.application;
+package org.ikigaidigital.application.service;
 
 import org.ikigaidigital.TimeDeposit;
 import org.ikigaidigital.TimeDepositCalculator;
