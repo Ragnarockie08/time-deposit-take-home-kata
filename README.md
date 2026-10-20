@@ -90,8 +90,9 @@ org.ikigaidigital
 
 ## Assumptions
 
-- One POST applies one month of interest. It does not advance `days`, as the original calculator never did,
-  and it is not idempotent: every call applies another month.
+- `days` is maintained by another service that owns the deposits; this one only applies interest. One POST
+  applies one month of interest to the deposits as stored and does not change `days`, as the original
+  calculator never did. It is not idempotent: every call applies another month.
 - "No interest after 1 year" for students means `days < 366`, exactly as the original code.
 - Plan types are the lowercase codes the original code used; unknown codes earn nothing.
 - Withdrawals are returned but do not affect interest; the task does not say how they would.

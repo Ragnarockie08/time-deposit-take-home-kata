@@ -100,9 +100,13 @@ pagination, one transaction per chunk) together with 2.3, and enable Hibernate J
 ## 3. Domain model
 
 ### 3.1 Time does not advance (Documented)
-The calculator never changes `days`, so one update call means "apply one month of interest" without
-moving time forward. **Improvement:** derive age from a start date and a business clock instead of a
-stored `days` counter.
+`days` is treated as input owned by another service, the one that creates deposits and keeps their age up to
+date. This service only applies one month of interest to the deposits as they are stored, and writes nothing
+but `balance`; its row locks keep it from overwriting changes made by that other service. This matches the task:
+the shared `TimeDeposit` has no setter for `days`, the original calculator never changed it, and the two required
+endpoints include no way to create or age a deposit. In this repository the demo data has no such service, so
+repeated updates see the same `days`. **Improvement**, if this service owned the data: store the date interest
+starts (the value date) and compute age from it and a business clock, instead of keeping a `days` counter.
 
 ### 3.2 "No interest after 1 year" means `days < 366` (Documented)
 Kept exactly as the legacy code does. Leap years and the exact cut-off day are business questions.
