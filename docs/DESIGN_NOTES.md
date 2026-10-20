@@ -27,13 +27,28 @@ The error always under-pays the customer. The README states that `updateBalance`
 its behaviour must not change, so the work is split:
 
 1. The refactor commit keeps the legacy `double` arithmetic exactly; the pinning tests prove it.
-2. A separate commit switches the calculator to `BigDecimal` internally and changes only the half-cent
-   tests. It can be reverted on its own if the legacy behaviour is required.
+2. A separate commit (`Calculate interest in decimal arithmetic`) switches the calculator and the policies to
+   `BigDecimal`. `TimeDeposit` and the `updateBalance` signature are unchanged: the balance is read with
+   `BigDecimal.valueOf`, interest is rounded `HALF_UP` to cents, and only the result is written back as a
+   `Double`. It can be reverted on its own if the legacy behaviour is required.
+
+Of the 21 pinning tests, exactly the 5 that recorded `double` artefacts changed: the three half-cent cases
+(now rounded up) and two balances that were not whole cents (`1.3800000000000001` is now `1.38`,
+`1001.6600000000001` is now `1001.66`). The same sweep against exact decimal arithmetic, for all three
+plans, now finds **0** differences in 300,000,000 cases.
+
+Other effects of the change, outside the money range the application uses:
+
+- `InterestPolicy.monthlyInterest` now returns `BigDecimal` instead of `double`. This changes the public
+  interface behind `TimeDepositCalculator(Map<PlanType, InterestPolicy>)`; custom policies must be updated.
+- A `NaN` or infinite balance now fails with `NumberFormatException` on every path; before, it passed through
+  unchanged when no interest was due. Balances come from `numeric(19,2)`, so the application cannot produce one.
 
 ### 1.2 Balance is a `Double` in the shared `TimeDeposit` class (Documented)
 `TimeDeposit` must not change, so its `Double balance` stays. The database (`numeric(19,2)`) and the API
-use decimals and convert at the edges with `BigDecimal.valueOf`. About 25% of legacy results are not exactly
-representable as `double` (for example `6.029999999999999`), which the edge conversion rounds back to cents.
+use decimals and convert at the edges with `BigDecimal.valueOf`. For whole-cent balances (all balances that
+come from the database), the decimal calculator returns the `double` closest to a whole-cent value, so the
+conversion is exact; the adapters still round to cents defensively.
 **Improvement:** a versioned `TimeDeposit` (or a new domain type) with a `BigDecimal` or `Money` balance,
 migrated with consumers.
 
