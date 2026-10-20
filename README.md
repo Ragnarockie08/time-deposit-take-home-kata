@@ -14,8 +14,9 @@ docker compose up -d          # PostgreSQL 16 on localhost:5432
 ```
 
 Flyway creates the schema and loads 8 demo deposits covering every plan and the boundary days
-(30/31, 45/46, 365/366). If port 5432 or 8080 is taken, copy `.env.example` to `.env` and change `DB_PORT`
-and `DB_URL`, and/or start the app with `./mvnw spring-boot:run -Dspring-boot.run.arguments=--server.port=8081`.
+(30/31, 45/46, 365/366). If port 5432 is taken, copy `.env.example` to `.env` and change `DB_PORT` and the
+port in `DB_URL`; both docker-compose and the application read it. If port 8080 is taken, start the app with
+`./mvnw spring-boot:run -Dspring-boot.run.arguments=--server.port=8081`.
 
 ## Trigger the endpoints with Swagger
 
