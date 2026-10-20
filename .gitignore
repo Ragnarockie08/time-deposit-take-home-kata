@@ -7,4 +7,6 @@ __pycache__/
 .vs/
 .idea/
 package-lock.json
-.vscode/.env
+.vscode/
+.env
+*.iml
