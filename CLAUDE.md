@@ -32,8 +32,9 @@ org.ikigaidigital
 - Behaviour first: the calculator pinning tests (`TimeDepositCalculatorTest`) are the safety net. A refactor
   must keep them green without editing them.
 - Tests explain themselves through their names: no comments or Javadoc in test code.
-- Production comments are one short line, only where the reason is not obvious; longer explanations go into
-  `docs/DESIGN_NOTES.md`.
+- No comments inside method bodies: extract a well-named method instead. Outside methods, a comment is one short
+  line and only states a reason the code cannot (for example an assumption about the task); longer explanations
+  go into `docs/DESIGN_NOTES.md`.
 - Every design trade-off or known limitation goes into `docs/DESIGN_NOTES.md` with a status.
 - Assumptions are stated in code comments where they apply, and summarised in the README.
 - Code, comments, file names and docs in English.
