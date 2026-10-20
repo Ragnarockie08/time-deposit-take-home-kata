@@ -66,6 +66,11 @@ class TimeDepositServiceTest {
         assertThat(result.get(2).withdrawals()).isEmpty();
     }
 
+    @Test
+    void getReturnsAnEmptyListWhenThereAreNoDeposits() {
+        assertThat(service.getAllTimeDeposits()).isEmpty();
+    }
+
     private static class FakeTimeDepositRepository implements TimeDepositRepository {
         final List<TimeDeposit> stored = new ArrayList<>();
         boolean loadedForUpdate;

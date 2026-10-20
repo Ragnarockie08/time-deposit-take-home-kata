@@ -11,6 +11,7 @@ import org.ikigaidigital.application.port.out.TimeDepositRepository;
 import org.ikigaidigital.application.port.out.WithdrawalRepository;
 import org.ikigaidigital.domain.Withdrawal;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
@@ -35,8 +36,6 @@ public class TimeDepositService implements UpdateBalancesUseCase, GetTimeDeposit
         this.calculator = calculator;
     }
 
-    // The advisory lock rejects overlapping runs across instances, the row locks protect against other
-    // writers, and one transaction makes the whole run all or nothing.
     @Override
     @Transactional
     public void updateAllBalances() {
@@ -49,7 +48,7 @@ public class TimeDepositService implements UpdateBalancesUseCase, GetTimeDeposit
     }
 
     @Override
-    @Transactional(readOnly = true)
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public List<TimeDepositWithWithdrawals> getAllTimeDeposits() {
         Map<Integer, List<Withdrawal>> withdrawalsByDeposit = withdrawalRepository.findAll().stream()
                 .collect(Collectors.groupingBy(Withdrawal::timeDepositId));
